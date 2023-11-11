@@ -1,8 +1,17 @@
+#include <chrono>
 #include <iostream>
 #include <list>
 #include <functional>
 #include <stdlib.h>
 #include <cstring>
+#include <pthread.h>
+#include <vector>
+#include <mutex>
+
+std::mutex mtx;
+int chunk_size = 0;
+int chunk_size2 = 0;
+int chunk_size1 = 0;
 
 void parallel_for(int low, int high, std::function<void(int)> &&lambda, int numThreads);
 void parallel_for(int low1, int high1, int low2, int high2, std::function<void(int, int)> &&lambda, int numThreads);
@@ -48,20 +57,71 @@ int main(int argc, char **argv) {
 
 #define main user_main
 
+void* parallel_for_helper(void* arg) {
+    auto data = static_cast<std::pair<std::function<void(int)>, int>*>(arg);
+    for (int i = data->second; i < data->second + chunk_size; ++i) {
+        data->first(i);
+    }
+//    std::lock_guard<std::mutex> lock(mtx);
+//    delete data;
+    return nullptr;
+}
+
 void parallel_for(int low, int high, std::function<void(int)> &&lambda, int numThreads) {
     auto start_time = std::chrono::high_resolution_clock::now();  // Record start time
 
     int range = high - low + 1;
-    int chunk_size = range / numThreads;
+    chunk_size = range / numThreads;
     std::vector<pthread_t> threads(numThreads);
+
+    std::vector<std::pair<std::function<void(int)>, int>*> dataVector(numThreads);
 
     for (int i = 0; i < numThreads; ++i) {
         int thread_low = low + i * chunk_size;
-        int thread_high = (i == numThreads - 1) ? high : thread_low + chunk_size - 1;
 
-        auto data = new std::pair<std::function<void(int)>, int>(lambda, thread_low);
+        dataVector[i] = new std::pair<std::function<void(int)>, int>(lambda, thread_low);
 
-        if (pthread_create(&threads[i], nullptr, parallel_for_helper, data) != 0) {
+        if (pthread_create(&threads[i], nullptr, parallel_for_helper, dataVector[i]) != 0) {
+            std::cerr << "Error creating thread " << i << std::endl;
+            return;
+        }
+    }
+
+    for (int i = 0; i < numThreads; ++i) {
+        pthread_join(threads[i], nullptr);
+        delete dataVector[i];  // Delete data after thread completion
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();  // Record end time
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+
+    std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
+}
+
+void* parallel_for_2d_helper(void* arg) {
+    auto data = static_cast<std::pair<std::function<void(int, int)>, std::pair<int, int> >*>(arg);
+    data->first(data->second.first, data->second.second);
+    delete data;
+    return nullptr;
+}
+
+void parallel_for(int low1, int high1, int low2, int high2, std::function<void(int, int)> &&lambda, int numThreads) {
+    auto start_time = std::chrono::high_resolution_clock::now();  // Record start time
+
+    int range1 = high1 - low1 + 1;
+    int range2 = high2 - low2 + 1;
+    chunk_size1 = range1 / numThreads;
+    chunk_size2 = range2 / numThreads;
+    std::vector<pthread_t> threads(numThreads);
+
+    for (int i = 0; i < numThreads; ++i) {
+        int thread_low1 = low1 + i * chunk_size1;
+        int thread_low2 = low2 + i * chunk_size2;
+
+        auto data = new std::pair<std::function<void(int, int)>, std::pair<int, int>>(
+                lambda, std::make_pair(thread_low1, thread_low2));
+
+        if (pthread_create(&threads[i], nullptr, parallel_for_2d_helper, data) != 0) {
             std::cerr << "Error creating thread " << i << std::endl;
             return;
         }
@@ -75,8 +135,4 @@ void parallel_for(int low, int high, std::function<void(int)> &&lambda, int numT
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 
     std::cout << "Total execution time: " << duration.count() << " microseconds" << std::endl;
-}
-
-void parallel_for(int low1, int high1, int low2, int high2, std::function<void(int, int)> &&lambda, int numThreads){
-
 }

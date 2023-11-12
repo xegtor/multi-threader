@@ -15,6 +15,7 @@
 - after which the threads are deleted.
 - In the end, the execution time is printed, which is kept tracked using `std::chrono`.
   ## Contributions
-  
+  - help make the helper functions and test the code - Swapnil Panighari.
+  - the implementation of the parllel_for and the helper functions - Rohak Kansal.
   ## GitHub Repository
   - https://github.com/xegtor/multi-threader

@@ -32,9 +32,9 @@ int main(int argc, char** argv) {
   printf("Test Success. \n");
   // cleanup memory
   parallel_for(0, size, [=](int i) {
-    delete A[i];
-    delete B[i];
-    delete C[i];
+    delete [] A[i];
+    delete [] B[i];
+    delete [] C[i];
   }, numThread);
   delete[] A;
   delete[] B;
